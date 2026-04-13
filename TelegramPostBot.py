@@ -7,7 +7,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 # =========================================
 # ضع هنا توكن البوت من BotFather
 # =========================================
-BOT_TOKEN = "8270434304:AAEvqdkWyn7pOGTGIGanUXiP_zirNfFoZjM"
+BOT_TOKEN = "YOUR_TOKEN_HERE"
 
 # =========================================
 # Spin Text
