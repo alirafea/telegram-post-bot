@@ -1,3 +1,4 @@
+import os
 import asyncio
 import re
 import random
@@ -7,7 +8,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 # =========================================
 # ضع هنا توكن البوت من BotFather
 # =========================================
-BOT_TOKEN = "YOUR_TOKEN_HERE"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # =========================================
 # Spin Text
