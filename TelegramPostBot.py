@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import random
+import itertools
 
 from telegram import (
     Update,
@@ -18,18 +19,100 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-LINE1_SPIN = r"""
-({I wasn’t even looking for this|I almost skipped checking today|Didn’t expect anything new today|Was just scrolling for a second|Opened the app randomly|I was only checking for a moment|Didn’t plan to look again today|I wasn’t expecting anything different|I almost ignored this completely|Was just passing by quickly}
-{ |…|}
-)
-"""
+# ---------------------------
+# EXPANDED CONTENT
+# ---------------------------
+LINE1_OPTIONS = [
+    "I wasn’t even looking for this",
+    "I almost skipped checking today",
+    "Didn’t expect anything new today",
+    "Was just scrolling for a second",
+    "Opened the app randomly",
+    "I was only checking for a moment",
+    "Didn’t plan to look again today",
+    "I wasn’t expecting anything different",
+    "I almost ignored this completely",
+    "Was just passing by quickly",
+    "I checked again out of curiosity",
+    "Didn’t think anything fresh was there",
+    "I opened it without expecting much",
+    "I was just taking a quick look",
+    "I almost moved on without checking",
+    "This caught me by surprise today",
+    "I wasn’t planning to stop here",
+    "I gave it one quick look",
+    "I checked only for a second",
+    "I nearly missed this update",
+]
 
-LINE2_SPIN = r"""
-({but something new showed up while scrolling|and something unexpected appeared|and I noticed a small change|but something felt different this time|and I saw something I didn’t expect|but something caught my attention|and a small update appeared|but I ended up noticing something new|and there was a change I didn’t expect|but something unusual popped up}
-)
-"""
+CONNECTORS = [
+    "",
+    "…",
+    "and then",
+    "but",
+    "when suddenly",
+    "and somehow",
+    "then",
+    "before I left",
+    "just now",
+    "a second later",
+]
 
-EMOJIS = ["😅", "👀", "🤔", "😄", "😮", "🔥", "✨", "🙃"]
+LINE2_OPTIONS = [
+    "something new showed up while scrolling",
+    "something unexpected appeared",
+    "I noticed a small change",
+    "something felt different this time",
+    "I saw something I didn’t expect",
+    "something caught my attention",
+    "a small update appeared",
+    "I ended up noticing something new",
+    "there was a change I didn’t expect",
+    "something unusual popped up",
+    "I found a fresh update",
+    "there was something worth checking",
+    "I spotted something new right away",
+    "something interesting appeared",
+    "a new change was sitting there",
+    "I noticed a fresh detail",
+    "there was a small surprise waiting",
+    "I ran into something different",
+    "I found something I almost missed",
+    "there was a quick update sitting there",
+]
+
+ENDINGS = [
+    "",
+    "😅",
+    "👀",
+    "🤔",
+    "😄",
+    "😮",
+    "🔥",
+    "✨",
+    "🙃",
+    "✅",
+    "📌",
+]
+
+OPENERS = [
+    "",
+    "Looks worth checking.",
+    "This one stood out.",
+    "That was unexpected.",
+    "Definitely caught my eye.",
+    "Might be worth a look.",
+    "This feels different.",
+    "That was a nice surprise.",
+    "Worth seeing once.",
+]
+
+# ---------------------------
+# STATE
+# ---------------------------
+ALL_POSTS: list[str] = []
+USED_POSTS: set[str] = set()
+AVAILABLE_POSTS: list[str] = []
 
 
 def clean_text(text: str) -> str:
@@ -39,69 +122,65 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def split_top_level_blocks(text: str) -> list[str]:
-    blocks = []
-    depth = 0
-    current = []
+def build_all_posts() -> list[str]:
+    posts = set()
 
-    for ch in text:
-        if ch == "(":
-            if depth == 0:
-                current = []
-            depth += 1
-            current.append(ch)
-        elif ch == ")":
-            if depth > 0:
-                current.append(ch)
-                depth -= 1
-                if depth == 0:
-                    block = "".join(current).strip()
-                    if block:
-                        blocks.append(block)
+    for line1, connector, line2, ending, opener in itertools.product(
+        LINE1_OPTIONS,
+        CONNECTORS,
+        LINE2_OPTIONS,
+        ENDINGS,
+        OPENERS,
+    ):
+        parts = [line1]
+
+        if connector:
+            parts.append(connector)
+
+        parts.append(line2)
+
+        first_line = " ".join(parts).strip()
+
+        if ending:
+            first_line = f"{first_line} {ending}"
+
+        if opener:
+            post = f"{first_line}\n{opener}"
         else:
-            if depth > 0:
-                current.append(ch)
+            post = first_line
 
-    return blocks
+        posts.add(clean_text(post))
 
-
-def expand_spin(segment: str) -> str:
-    pattern = re.compile(r"\{([^{}]*)\}")
-
-    while True:
-        match = pattern.search(segment)
-        if not match:
-            break
-
-        choices = match.group(1).split("|")
-        replacement = random.choice(choices)
-        segment = segment[:match.start()] + replacement + segment[match.end():]
-
-    return clean_text(segment)
+    posts_list = list(posts)
+    random.shuffle(posts_list)
+    return posts_list
 
 
-def generate_from_spin(spin_text: str) -> str:
-    blocks = split_top_level_blocks(spin_text)
-    if not blocks:
-        return ""
-
-    block = random.choice(blocks)
-    block_content = block.strip()
-
-    if block_content.startswith("(") and block_content.endswith(")"):
-        block_content = block_content[1:-1]
-
-    return clean_text(expand_spin(block_content))
+def reset_available_posts() -> None:
+    global AVAILABLE_POSTS
+    AVAILABLE_POSTS = ALL_POSTS.copy()
+    random.shuffle(AVAILABLE_POSTS)
 
 
-def generate_single_post() -> str:
-    line1 = generate_from_spin(LINE1_SPIN)
-    line2 = generate_from_spin(LINE2_SPIN)
+def get_unique_post() -> str:
+    global AVAILABLE_POSTS, USED_POSTS
 
-    if random.random() < 0.85 and not any(emoji in line2 for emoji in EMOJIS):
-        line2 += " " + random.choice(EMOJIS)
+    if not AVAILABLE_POSTS:
+        USED_POSTS.clear()
+        reset_available_posts()
 
-    return clean_text(f"{line1}\n{line2}")
+    while AVAILABLE_POSTS:
+        post = AVAILABLE_POSTS.pop()
+        if post not in USED_POSTS:
+            USED_POSTS.add(post)
+            return post
+
+    # Fallback safety
+    USED_POSTS.clear()
+    reset_available_posts()
+    post = AVAILABLE_POSTS.pop()
+    USED_POSTS.add(post)
+    return post
 
 
 def build_keyboard(post_text: str) -> InlineKeyboardMarkup:
@@ -114,10 +193,10 @@ def build_keyboard(post_text: str) -> InlineKeyboardMarkup:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    post = generate_single_post()
+    post = get_unique_post()
     text = (
         "Welcome.\n\n"
-        "Press the button below to generate a post.\n\n"
+        "Press the button below to generate a unique post.\n\n"
         f"{post}"
     )
     await update.message.reply_text(
@@ -127,7 +206,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    post = generate_single_post()
+    post = get_unique_post()
     text = (
         "Use the buttons below.\n\n"
         f"{post}"
@@ -139,7 +218,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def post_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    post = generate_single_post()
+    post = get_unique_post()
     await update.message.reply_text(
         text=post,
         reply_markup=build_keyboard(post),
@@ -154,7 +233,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await query.answer()
 
     if query.data == "generate_post":
-        post = generate_single_post()
+        post = get_unique_post()
         await query.edit_message_text(
             text=post,
             reply_markup=build_keyboard(post),
@@ -162,8 +241,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def main() -> None:
+    global ALL_POSTS
+
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN is missing. Add it in Railway Variables.")
+
+    ALL_POSTS = build_all_posts()
+    reset_available_posts()
+
+    print(f"Total unique posts loaded: {len(ALL_POSTS)}")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
