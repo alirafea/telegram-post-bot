@@ -1,20 +1,23 @@
-import os
 import asyncio
+import os
 import re
 import random
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
 
-# =========================================
-# ضع هنا توكن البوت من BotFather
-# =========================================
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    CopyTextButton,
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    CallbackQueryHandler,
+)
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# =========================================
-# Spin Text
-# السطر الأول = افتتاحية
-# السطر الثاني = النتيجة / الملاحظة
-# =========================================
 LINE1_SPIN = r"""
 ({I wasn’t even looking for this|I almost skipped checking today|Didn’t expect anything new today|Was just scrolling for a second|Opened the app randomly|I was only checking for a moment|Didn’t plan to look again today|I wasn’t expecting anything different|I almost ignored this completely|Was just passing by quickly}
 { |…|}
@@ -26,7 +29,6 @@ LINE2_SPIN = r"""
 )
 """
 
-# قائمة الإيموجي
 EMOJIS = ["😅", "👀", "🤔", "😄", "😮", "🔥", "✨", "🙃"]
 
 
@@ -96,45 +98,73 @@ def generate_single_post() -> str:
     line1 = generate_from_spin(LINE1_SPIN)
     line2 = generate_from_spin(LINE2_SPIN)
 
-    # إضافة إيموجي في أغلب الحالات
-    if random.random() < 0.85:
-        if not any(emoji in line2 for emoji in EMOJIS):
-            line2 += " " + random.choice(EMOJIS)
+    if random.random() < 0.85 and not any(emoji in line2 for emoji in EMOJIS):
+        line2 += " " + random.choice(EMOJIS)
 
-    post = f"{line1}\n{line2}"
-    return clean_text(post)
+    return clean_text(f"{line1}\n{line2}")
 
 
-# =========================================
-# أوامر تيليجرام
-# =========================================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = (
-        "Bot is running.\n\n"
-        "Commands:\n"
-        "/post - generate one post\n"
-        "/help - show help"
+def build_keyboard(post_text: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("Generate Post 🔥", callback_data="generate_post")],
+            [InlineKeyboardButton("Copy Post 📋", copy_text=CopyTextButton(text=post_text))],
+        ]
     )
-    await update.message.reply_text(msg)
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    post = generate_single_post()
+    text = (
+        "Welcome.\n\n"
+        "Press the button below to generate a post.\n\n"
+        f"{post}"
+    )
+    await update.message.reply_text(
+        text=text,
+        reply_markup=build_keyboard(post),
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = (
-        "Available commands:\n"
-        "/post - generate one post\n"
-        "/start - start the bot\n"
-        "/help - show help"
+    post = generate_single_post()
+    text = (
+        "Use the buttons below.\n\n"
+        f"{post}"
     )
-    await update.message.reply_text(msg)
+    await update.message.reply_text(
+        text=text,
+        reply_markup=build_keyboard(post),
+    )
 
 
 async def post_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     post = generate_single_post()
-    await update.message.reply_text(post)
+    await update.message.reply_text(
+        text=post,
+        reply_markup=build_keyboard(post),
+    )
+
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None:
+        return
+
+    await query.answer()
+
+    if query.data == "generate_post":
+        post = generate_single_post()
+        await query.edit_message_text(
+            text=post,
+            reply_markup=build_keyboard(post),
+        )
 
 
 def main() -> None:
-    # مهم لبعض إصدارات بايثون الحديثة
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN is missing. Add it in Railway Variables.")
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -143,6 +173,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("post", post_command))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
     print("Bot is running...")
     app.run_polling()
