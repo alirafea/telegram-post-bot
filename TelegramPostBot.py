@@ -2,8 +2,6 @@ import asyncio
 import os
 import re
 import random
-import itertools
-
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -19,9 +17,10 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# ---------------------------
-# EXPANDED CONTENT
-# ---------------------------
+# =========================
+# CONTENT BANK
+# =========================
+
 LINE1_OPTIONS = [
     "I wasn’t even looking for this",
     "I almost skipped checking today",
@@ -34,7 +33,6 @@ LINE1_OPTIONS = [
     "I almost ignored this completely",
     "Was just passing by quickly",
     "I checked again out of curiosity",
-    "Didn’t think anything fresh was there",
     "I opened it without expecting much",
     "I was just taking a quick look",
     "I almost moved on without checking",
@@ -44,7 +42,6 @@ LINE1_OPTIONS = [
     "I checked only for a second",
     "I nearly missed this update",
     "I checked back for a moment",
-    "I opened this without expecting much",
     "I was about to move on",
     "I just stopped here briefly",
     "I came across this by chance",
@@ -87,14 +84,12 @@ LINE1_OPTIONS = [
 
 CONNECTORS = [
     "",
-    "…",
     "and then",
     "but",
     "when suddenly",
     "and somehow",
     "then",
     "before I left",
-    "just now",
     "a second later",
     "and right away",
     "before moving on",
@@ -120,7 +115,6 @@ LINE2_OPTIONS = [
     "there was a change I didn’t expect",
     "something unusual popped up",
     "I found a fresh update",
-    "there was something worth checking",
     "I spotted something new right away",
     "something interesting appeared",
     "a new change was sitting there",
@@ -130,7 +124,6 @@ LINE2_OPTIONS = [
     "I found something I almost missed",
     "there was a quick update sitting there",
     "a fresh detail caught my eye",
-    "something worth a look appeared",
     "a small shift stood out immediately",
     "I noticed something different at once",
     "there was a new detail waiting there",
@@ -142,18 +135,15 @@ LINE2_OPTIONS = [
     "a small update stood out",
     "there was something new sitting there",
     "I saw a fresh detail pop up",
-    "something interesting was waiting there",
     "there was a change worth noticing",
     "a tiny update caught my eye",
     "something new appeared out of nowhere",
     "I picked up on a new detail",
     "there was something different right there",
     "a fresh change was easy to spot",
-    "something worth seeing popped up",
     "I found a detail I had not seen before",
     "there was a fresh change sitting there",
     "something new showed up unexpectedly",
-    "I noticed a new point immediately",
     "there was something slightly different this time",
     "a new detail stood out fast",
     "I caught a fresh update while checking",
@@ -171,7 +161,22 @@ LINE2_OPTIONS = [
     "I spotted a new detail in seconds",
 ]
 
-ENDINGS = [
+SOFT_OPENERS = [
+    "",
+    "That stood out.",
+    "That felt different.",
+    "That caught my eye.",
+    "That was unexpected.",
+    "This looked different.",
+    "This one felt new.",
+    "That was easy to notice.",
+    "This stood out fast.",
+    "That looked slightly off.",
+    "Something there felt different.",
+    "This was hard to miss.",
+]
+
+MICRO_ENDINGS = [
     "",
     "😅",
     "👀",
@@ -181,58 +186,14 @@ ENDINGS = [
     "🔥",
     "✨",
     "🙃",
-    "✅",
-    "📌",
-    "🙂",
-    "💡",
-    "🚀",
-    "⭐",
-    "🟢",
-    "🎯",
-    "🆕",
-    "📍",
-    "⚡",
 ]
 
-OPENERS = [
-    "",
-    "Looks worth checking.",
-    "This one stood out.",
-    "That was unexpected.",
-    "Definitely caught my eye.",
-    "Might be worth a look.",
-    "This feels different.",
-    "That was a nice surprise.",
-    "Worth seeing once.",
-    "Took me by surprise.",
-    "This one looks fresh.",
-    "That caught my attention fast.",
-    "This was easy to notice.",
-    "Worth a quick glance.",
-    "This part stood out.",
-    "That looked different right away.",
-    "A small thing but worth seeing.",
-    "This looked better than expected.",
-    "That was worth a quick look.",
-    "This one was hard to ignore.",
-    "A quick look was enough.",
-    "This felt newer than usual.",
-    "That was a clean surprise.",
-    "Something here stood out.",
-    "That looked interesting right away.",
-    "This one deserves a second look.",
-    "Worth checking once.",
-    "That turned out better than expected.",
-    "This one felt slightly different.",
-    "Caught my eye instantly.",
-]
-# ---------------------------
-# STATE
-# ---------------------------
-ALL_POSTS: list[str] = []
-USED_POSTS: set[str] = set()
-AVAILABLE_POSTS: list[str] = []
+USED_POSTS = set()
 
+
+# =========================
+# HELPERS
+# =========================
 
 def clean_text(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
@@ -241,64 +202,122 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def build_all_posts() -> list[str]:
-    posts = set()
-
-    for line1, connector, line2, ending, opener in itertools.product(
-        LINE1_OPTIONS,
-        CONNECTORS,
-        LINE2_OPTIONS,
-        ENDINGS,
-        OPENERS,
-    ):
-        parts = [line1]
-
-        if connector:
-            parts.append(connector)
-
-        parts.append(line2)
-
-        first_line = " ".join(parts).strip()
-
-        if ending:
-            first_line = f"{first_line} {ending}"
-
-        if opener:
-            post = f"{first_line}\n{opener}"
-        else:
-            post = first_line
-
-        posts.add(clean_text(post))
-
-    posts_list = list(posts)
-    random.shuffle(posts_list)
-    return posts_list
+def maybe_emoji(text: str) -> str:
+    emoji = random.choice(MICRO_ENDINGS)
+    if emoji:
+        return f"{text} {emoji}"
+    return text
 
 
-def reset_available_posts() -> None:
-    global AVAILABLE_POSTS
-    AVAILABLE_POSTS = ALL_POSTS.copy()
-    random.shuffle(AVAILABLE_POSTS)
+def build_candidate_parts() -> tuple[str, str, str, str]:
+    line1 = random.choice(LINE1_OPTIONS)
+    connector = random.choice(CONNECTORS)
+    line2 = random.choice(LINE2_OPTIONS)
+    opener = random.choice(SOFT_OPENERS)
+    return line1, connector, line2, opener
 
 
-def get_unique_post() -> str:
-    global AVAILABLE_POSTS, USED_POSTS
+def format_style_one(line1: str, connector: str, line2: str, opener: str) -> str:
+    # سطرين طبيعيين
+    first = line1
+    second = f"{connector} {line2}".strip() if connector else line2
+    second = maybe_emoji(second)
+    return clean_text(f"{first}\n{second}")
 
-    if not AVAILABLE_POSTS:
-        USED_POSTS.clear()
-        reset_available_posts()
 
-    while AVAILABLE_POSTS:
-        post = AVAILABLE_POSTS.pop()
-        if post not in USED_POSTS:
-            USED_POSTS.add(post)
+def format_style_two(line1: str, connector: str, line2: str, opener: str) -> str:
+    # سطر واحد
+    parts = [line1]
+    if connector:
+        parts.append(connector)
+    parts.append(line2)
+    text = " ".join(parts)
+    text = maybe_emoji(text)
+    return clean_text(text)
+
+
+def format_style_three(line1: str, connector: str, line2: str, opener: str) -> str:
+    # سطر قصير + سطر ثاني مباشر
+    first = line1
+    second = line2
+    second = maybe_emoji(second)
+    return clean_text(f"{first}\n{second}")
+
+
+def format_style_four(line1: str, connector: str, line2: str, opener: str) -> str:
+    # سطرين مع opener خفيف
+    first = opener if opener else line1
+    second_parts = [line1]
+    if connector:
+        second_parts.append(connector)
+    second_parts.append(line2)
+    second = " ".join(second_parts)
+    second = maybe_emoji(second)
+    return clean_text(f"{first}\n{second}")
+
+
+def format_style_five(line1: str, connector: str, line2: str, opener: str) -> str:
+    # جملة قصيرة جدًا
+    short = random.choice([
+        line1,
+        line2,
+        f"{line1} {line2}",
+        f"{line1} and {line2}",
+    ])
+    short = maybe_emoji(clean_text(short))
+    return short
+
+
+def format_style_six(line1: str, connector: str, line2: str, opener: str) -> str:
+    # صياغة مختلفة تمامًا نسبيًا
+    variants = [
+        f"{line1}\n{line2}",
+        f"{line1}\n{opener}" if opener else f"{line1}\n{line2}",
+        f"{opener}\n{line2}" if opener else f"{line1}\n{line2}",
+        f"{line1} {connector} {line2}".strip(),
+    ]
+    chosen = clean_text(random.choice(variants))
+    return maybe_emoji(chosen)
+
+
+def build_post_once() -> str:
+    line1, connector, line2, opener = build_candidate_parts()
+
+    style_builder = random.choice([
+        format_style_one,
+        format_style_two,
+        format_style_three,
+        format_style_four,
+        format_style_five,
+        format_style_six,
+    ])
+
+    post = style_builder(line1, connector, line2, opener)
+
+    # تنظيف أخير
+    post = clean_text(post)
+
+    # ضمان عدم الطول الزائد
+    lines = [x.strip() for x in post.split("\n") if x.strip()]
+    if len(lines) > 2:
+        lines = lines[:2]
+        post = "\n".join(lines)
+
+    return clean_text(post)
+
+
+def get_unique_post(max_attempts: int = 300) -> str:
+    for _ in range(max_attempts):
+        post = build_post_once()
+        key = post.lower().strip()
+
+        if key not in USED_POSTS:
+            USED_POSTS.add(key)
             return post
 
-    # Fallback safety
-    USED_POSTS.clear()
-    reset_available_posts()
-    post = AVAILABLE_POSTS.pop()
-    USED_POSTS.add(post)
+    # fallback
+    post = build_post_once()
+    USED_POSTS.add(post.lower().strip())
     return post
 
 
@@ -311,7 +330,14 @@ def build_keyboard(post_text: str) -> InlineKeyboardMarkup:
     )
 
 
+# =========================
+# TELEGRAM HANDLERS
+# =========================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message is None:
+        return
+
     post = get_unique_post()
     text = (
         "Welcome.\n\n"
@@ -325,6 +351,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message is None:
+        return
+
     post = get_unique_post()
     text = (
         "Use the buttons below.\n\n"
@@ -337,6 +366,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def post_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message is None:
+        return
+
     post = get_unique_post()
     await update.message.reply_text(
         text=post,
@@ -359,16 +391,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
 
-def main() -> None:
-    global ALL_POSTS
+# =========================
+# MAIN
+# =========================
 
+def main() -> None:
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN is missing. Add it in Railway Variables.")
-
-    ALL_POSTS = build_all_posts()
-    reset_available_posts()
-
-    print(f"Total unique posts loaded: {len(ALL_POSTS)}")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
